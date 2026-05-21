@@ -1,5 +1,11 @@
 import streamlit as st
 
+# Check if user is logged in
+if not st.session_state.get("user_id"):
+    st.error("🔒 Please log in first")
+    st.stop()
+
+
 from services.calendar_service import get_all_sessions, sessions_to_dicts
 from services.performance_model import compute_ctl_atl
 
@@ -8,7 +14,15 @@ from services.coach.workout_generator import build_workout
 
 st.title("AI Training Coach")
 
-rows = get_all_sessions()
+if st.session_state.user_id:
+    with st.sidebar:
+        st.write(f"👤 Logged in as: **{st.session_state.username}**")
+        if st.button("🚪 Logout"):
+            st.session_state.user_id = None
+            st.session_state.username = None
+            st.rerun()
+
+rows = get_all_sessions(st.session_state.user_id)
 sessions = sessions_to_dicts(rows)
 
 history = compute_ctl_atl(sessions)

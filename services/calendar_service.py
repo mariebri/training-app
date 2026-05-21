@@ -2,11 +2,14 @@ from services.database import (
     get_connection,
     update_training_session,
     delete_training_session,
+    add_training_session_db,
+    get_all_sessions_for_user,
 )
 from utils.constants import INTENSITIES, ACTIVITIES
 
 
 def add_training_session(
+    user_id,
     title,
     activity,
     intensity,
@@ -16,66 +19,21 @@ def add_training_session(
     distance_km,
     notes,
 ):
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO training_sessions (
-            title,
-            activity,
-            intensity,
-            time_slot,
-            session_date,
-            duration_minutes,
-            distance_km,
-            notes
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            title,
-            activity,
-            intensity,
-            time_slot,
-            session_date,
-            duration_minutes,
-            distance_km,
-            notes,
-        ),
+    add_training_session_db(
+        user_id,
+        title,
+        activity,
+        intensity,
+        time_slot,
+        session_date,
+        duration_minutes,
+        distance_km,
+        notes,
     )
 
-    conn.commit()
-    conn.close()
 
-
-def get_all_sessions():
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT
-            id,
-            title,
-            activity,
-            intensity,
-            time_slot,
-            session_date,
-            duration_minutes,
-            distance_km,
-            notes
-        FROM training_sessions
-        """
-    )
-
-    rows = cursor.fetchall()
-
-    conn.close()
-
-    return rows
+def get_all_sessions(user_id):
+    return get_all_sessions_for_user(user_id)
 
 
 def convert_sessions_to_calendar_events(rows):

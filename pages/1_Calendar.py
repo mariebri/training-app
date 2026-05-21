@@ -1,6 +1,12 @@
 import streamlit as st
+from datetime import date, datetime, timedelta
+
+# Check if user is logged in
+if not st.session_state.get("user_id"):
+    st.error("🔒 Please log in first")
+    st.stop()
+
 from streamlit_calendar import calendar
-from datetime import date
 
 from services.calendar_service import (
     add_training_session,
@@ -16,6 +22,14 @@ from utils.constants import TIME_SLOTS, ACTIVITIES
 st.title("Treningskalender")
 
 inject_calendar_styles()
+
+if st.session_state.user_id:
+    with st.sidebar:
+        st.write(f"👤 Logged in as: **{st.session_state.username}**")
+        if st.button("🚪 Logout"):
+            st.session_state.user_id = None
+            st.session_state.username = None
+            st.rerun()
 
 # ==========================================
 # INITIALIZE SESSION STATE
@@ -64,11 +78,12 @@ def open_view_dialog(event):
 # CALENDAR
 # ==========================================
 
-rows = get_all_sessions()
+rows = get_all_sessions(st.session_state.user_id)
 events = convert_sessions_to_calendar_events(rows)
 
 calendar_options = {
     "firstDay": 1,
+    "timeZone": "local",
     "weekNumbers": True,
     "weekText": "",
     "locale": "nb",
@@ -98,13 +113,19 @@ if calendar_state.get("eventClick"):
     open_view_dialog(event)
 
 elif calendar_state.get("dateClick"):
-    clicked_date_str = calendar_state["dateClick"]["date"]
+    clicked_date_raw = calendar_state["dateClick"].get(
+        "dateStr", calendar_state["dateClick"]["date"]
+    )
+    clicked_date_str = str(clicked_date_raw)[:10]
     action_key = f"date:{clicked_date_str}"
 
     if st.session_state["last_calendar_action"] != action_key:
         st.session_state["last_calendar_action"] = action_key
 
-        clicked_date = date.fromisoformat(clicked_date_str[:10])
+        # Temporary workaround for persistent one-day negative shift from calendar click payload.
+        clicked_date = datetime.strptime(
+            clicked_date_str, "%Y-%m-%d"
+        ).date() + timedelta(days=1)
         open_add_dialog(clicked_date)
 
 elif calendar_state.get("eventChange"):
@@ -122,7 +143,7 @@ elif calendar_state.get("eventChange"):
         activity=props["activity"],
         intensity=props["intensity"],
         time_slot=props["time_slot"],
-        session_date=new_date,  # This is the new dragged date
+        session_date=new_date,
         duration_minutes=props["duration_minutes"],
         distance_km=props["distance_km"],
         notes=props["notes"],
@@ -178,6 +199,7 @@ if (
 
             if submitted:
                 add_training_session(
+                    user_id=st.session_state.user_id,
                     title=title,
                     activity=activity,
                     intensity=intensity,
