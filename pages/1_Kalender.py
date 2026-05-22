@@ -1,9 +1,8 @@
 import streamlit as st
-from datetime import date, datetime, timedelta
 
 # Check if user is logged in
 if not st.session_state.get("user_id"):
-    st.error("🔒 Please log in first")
+    st.error("🔒 Logg inn først")
     st.stop()
 
 from streamlit_calendar import calendar
@@ -14,6 +13,17 @@ from services.calendar_service import (
     convert_sessions_to_calendar_events,
     update_session,
     delete_session,
+    get_templates,
+    get_sidebar_first_name,
+)
+from services.calendar_page_service import (
+    build_risk_overlay_events,
+    close_dialog,
+    initialize_calendar_state,
+    normalize_clicked_date,
+    open_add_dialog,
+    open_choose_dialog,
+    open_view_dialog,
 )
 
 from utils.ui_styles import inject_calendar_styles
@@ -25,8 +35,11 @@ inject_calendar_styles()
 
 if st.session_state.user_id:
     with st.sidebar:
-        st.write(f"👤 Logged in as: **{st.session_state.username}**")
-        if st.button("🚪 Logout"):
+        first_name = get_sidebar_first_name(
+            st.session_state.user_id, st.session_state.username
+        )
+        st.write(f"👋 Hei, **{first_name}**!")
+        if st.button("🚪 Logg ut"):
             st.session_state.user_id = None
             st.session_state.username = None
             st.rerun()
@@ -34,44 +47,7 @@ if st.session_state.user_id:
 # ==========================================
 # INITIALIZE SESSION STATE
 # ==========================================
-
-initialize_ss_dict = {
-    "dialog_mode": None,  # None, "add", "view"
-    "selected_date": date.today(),
-    "selected_event": None,
-    "edit_mode": False,
-    "last_calendar_action": None,
-}
-
-for key, default_value in initialize_ss_dict.items():
-    if key not in st.session_state:
-        st.session_state[key] = default_value
-
-
-def close_dialog():
-    """Lukk dialog og reset state."""
-    st.session_state.pop("show_dialog", None)
-    st.session_state["dialog_mode"] = None
-    st.session_state["selected_event"] = None
-    st.session_state["edit_mode"] = False
-    st.session_state["selected_date"] = date.today()
-
-
-def open_add_dialog(selected_date=None):
-    """Åpne 'legg til'-dialog, lukk andre dialoger først."""
-    st.session_state["show_dialog"] = "add"
-    st.session_state["dialog_mode"] = "add"
-    st.session_state["selected_event"] = None
-    st.session_state["edit_mode"] = False
-    st.session_state["selected_date"] = selected_date or date.today()
-
-
-def open_view_dialog(event):
-    """Åpne 'vis økt'-dialog, lukk andre dialoger først."""
-    st.session_state["show_dialog"] = "view"
-    st.session_state["dialog_mode"] = "view"
-    st.session_state["selected_event"] = event
-    st.session_state["edit_mode"] = st.session_state.pop("in_editing", False)
+initialize_calendar_state(st.session_state)
 
 
 # ==========================================
@@ -80,6 +56,8 @@ def open_view_dialog(event):
 
 rows = get_all_sessions(st.session_state.user_id)
 events = convert_sessions_to_calendar_events(rows)
+templates = get_templates(st.session_state.user_id, include_in_calendar=True)
+events.extend(build_risk_overlay_events(rows))
 
 calendar_options = {
     "firstDay": 1,
@@ -102,15 +80,17 @@ calendar_state = calendar(
     events=events, options=calendar_options, key="training_calendar"
 )
 
+st.caption(
+    "Trafikklys neste 7 dager: Grønn = lav risiko, gul = moderat, rød = høy belastning"
+)
+
 # ==========================================
 # HANDLE CALENDAR INTERACTIONS
 # ==========================================
 
-calendar_action = None
-
 if calendar_state.get("eventClick"):
     event = calendar_state["eventClick"]["event"]
-    open_view_dialog(event)
+    open_view_dialog(st.session_state, event)
 
 elif calendar_state.get("dateClick"):
     clicked_date_raw = calendar_state["dateClick"].get(
@@ -121,12 +101,9 @@ elif calendar_state.get("dateClick"):
 
     if st.session_state["last_calendar_action"] != action_key:
         st.session_state["last_calendar_action"] = action_key
-
-        # Temporary workaround for persistent one-day negative shift from calendar click payload.
-        clicked_date = datetime.strptime(
-            clicked_date_str, "%Y-%m-%d"
-        ).date() + timedelta(days=1)
-        open_add_dialog(clicked_date)
+        clicked_date = normalize_clicked_date(clicked_date_str)
+        st.session_state["prefill_session"] = None
+        open_choose_dialog(st.session_state, clicked_date)
 
 elif calendar_state.get("eventChange"):
     drop_event = calendar_state["eventChange"]["event"]
@@ -151,13 +128,56 @@ elif calendar_state.get("eventChange"):
     st.rerun()
 
 
+if st.button("➕ Legg til økt"):
+    st.session_state["prefill_session"] = None
+    open_add_dialog(st.session_state)
+    st.rerun()
+
+
 # ==========================================
-# ADD NEW SESSION BUTTON
+# CHOOSE SESSION TYPE DIALOG
 # ==========================================
 
-if st.button("➕ Legg til"):
-    open_add_dialog()
-    st.rerun()
+if (
+    st.session_state.get("show_dialog", False) == "choose"
+    and st.session_state["dialog_mode"] == "choose"
+):
+
+    @st.dialog("Velg type økt")
+    def choose_session_dialog():
+        st.write("Dato:", st.session_state["selected_date"].strftime("%d/%m/%Y"))
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Ny økt", key="choose_new_session"):
+                st.session_state["prefill_session"] = None
+                st.session_state["show_dialog"] = "add"
+                st.session_state["dialog_mode"] = "add"
+                st.rerun()
+        with col2:
+            if st.button("Avbryt", key="choose_cancel"):
+                close_dialog(st.session_state)
+                st.rerun()
+
+        st.divider()
+        st.markdown("**Predefinerte økter**")
+
+        if not templates:
+            st.info("Ingen predefinerte økter funnet. Legg til på Bruker-siden.")
+        else:
+            for template in templates:
+                label = (
+                    f"{template['name']} - {template['activity']} - "
+                    f"{template['intensity']} - {template['duration_minutes']} min"
+                )
+                if st.button(label, key=f"choose_template_{template['id']}"):
+                    st.session_state["prefill_session"] = template
+                    st.session_state["show_dialog"] = "add"
+                    st.session_state["dialog_mode"] = "add"
+                    st.rerun()
+
+    choose_session_dialog()
+    st.session_state["show_dialog"] = None
 
 
 # ==========================================
@@ -171,12 +191,38 @@ if (
 
     @st.dialog("Legg til treningsøkt")
     def add_session_dialog():
+        prefill = st.session_state.get("prefill_session") or {}
+
+        default_activity = prefill.get("activity") or list(ACTIVITIES.keys())[0]
+        if default_activity not in ACTIVITIES:
+            default_activity = list(ACTIVITIES.keys())[0]
+
+        default_intensity = prefill.get("intensity") or "Lett"
+        intensity_options = ["Lett", "Moderat", "Hardt"]
+        if default_intensity not in intensity_options:
+            default_intensity = "Lett"
+
+        default_time_slot = prefill.get("time_slot") or TIME_SLOTS[0]
+        if default_time_slot not in TIME_SLOTS:
+            default_time_slot = TIME_SLOTS[0]
 
         with st.form("training_form"):
-            title = st.text_input("Tittel")
-            activity = st.selectbox("Aktivitet", list(ACTIVITIES.keys()))
-            intensity = st.selectbox("Intensitet", ["Lett", "Moderat", "Hardt"])
-            time_slot = st.selectbox("Tidspunkt", TIME_SLOTS)
+            title = st.text_input("Tittel", value=prefill.get("name") or "")
+            activity = st.selectbox(
+                "Aktivitet",
+                list(ACTIVITIES.keys()),
+                index=list(ACTIVITIES.keys()).index(default_activity),
+            )
+            intensity = st.selectbox(
+                "Intensitet",
+                intensity_options,
+                index=intensity_options.index(default_intensity),
+            )
+            time_slot = st.selectbox(
+                "Tidspunkt",
+                TIME_SLOTS,
+                index=TIME_SLOTS.index(default_time_slot),
+            )
 
             session_date = st.date_input(
                 "Dato",
@@ -185,10 +231,18 @@ if (
             )
 
             duration_minutes = st.number_input(
-                "Varighet (minutter)", min_value=0, step=5
+                "Varighet (minutter)",
+                min_value=0,
+                step=5,
+                value=int(prefill.get("duration_minutes") or 0),
             )
-            distance_km = st.number_input("Distanse (km)", min_value=0.0, step=1.0)
-            notes = st.text_area("Notater")
+            distance_km = st.number_input(
+                "Distanse (km)",
+                min_value=0.0,
+                step=1.0,
+                value=float(prefill.get("distance_km") or 0.0),
+            )
+            notes = st.text_area("Notater", value=prefill.get("notes") or "")
 
             col1, col2 = st.columns(2)
 
@@ -209,11 +263,11 @@ if (
                     distance_km=distance_km,
                     notes=notes,
                 )
-                close_dialog()
+                close_dialog(st.session_state)
                 st.rerun()
 
             if cancel:
-                close_dialog()
+                close_dialog(st.session_state)
                 st.rerun()
 
     add_session_dialog()
@@ -268,7 +322,7 @@ if (
                 if st.button("🗑️ Fjern økt", key="btn_delete"):
                     with st.spinner("Fjerner økten..."):
                         delete_session(session_id)
-                    close_dialog()
+                    close_dialog(st.session_state)
                     st.rerun()
 
         else:

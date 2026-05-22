@@ -1,9 +1,14 @@
 from services.database import (
-    get_connection,
     update_training_session,
     delete_training_session,
     add_training_session_db,
     get_all_sessions_for_user,
+    get_user_profile,
+    upsert_user_profile,
+    add_predefined_session,
+    get_predefined_sessions,
+    delete_predefined_session,
+    update_predefined_session,
 )
 from utils.constants import INTENSITIES, ACTIVITIES
 
@@ -134,3 +139,124 @@ def sessions_to_dicts(rows):
         )
 
     return sessions
+
+
+def get_profile(user_id):
+    return get_user_profile(user_id)
+
+
+def save_profile(
+    user_id,
+    first_name,
+    last_name,
+    age,
+    sex,
+    height_cm,
+    weight_kg,
+    resting_hr,
+    max_hr,
+    ftp_watts,
+    vo2max,
+):
+    upsert_user_profile(
+        user_id,
+        first_name,
+        last_name,
+        age,
+        sex,
+        height_cm,
+        weight_kg,
+        resting_hr,
+        max_hr,
+        ftp_watts,
+        vo2max,
+    )
+
+
+def get_sidebar_first_name(user_id, fallback_username):
+    profile = get_user_profile(user_id)
+    if profile:
+        first_name = (profile.get("first_name") or "").strip()
+        if first_name:
+            return first_name
+
+        legacy_full_name = (profile.get("full_name") or "").strip()
+        if legacy_full_name:
+            return legacy_full_name.split()[0]
+
+    return fallback_username
+
+
+def add_template(
+    user_id,
+    name,
+    activity,
+    intensity,
+    time_slot,
+    duration_minutes,
+    distance_km,
+    notes,
+    include_in_calendar,
+):
+    add_predefined_session(
+        user_id,
+        name,
+        activity,
+        intensity,
+        time_slot,
+        duration_minutes,
+        distance_km,
+        notes,
+        include_in_calendar,
+    )
+
+
+def get_templates(user_id, include_in_calendar=None):
+    rows = get_predefined_sessions(user_id, include_in_calendar=include_in_calendar)
+    templates = []
+    for r in rows:
+        templates.append(
+            {
+                "id": r[0],
+                "user_id": r[1],
+                "name": r[2],
+                "activity": r[3],
+                "intensity": r[4],
+                "time_slot": r[5],
+                "duration_minutes": r[6],
+                "distance_km": r[7],
+                "notes": r[8],
+                "include_in_calendar": bool(r[9]),
+            }
+        )
+    return templates
+
+
+def delete_template(template_id, user_id):
+    delete_predefined_session(template_id, user_id)
+
+
+def update_template(
+    template_id,
+    user_id,
+    name,
+    activity,
+    intensity,
+    time_slot,
+    duration_minutes,
+    distance_km,
+    notes,
+    include_in_calendar,
+):
+    update_predefined_session(
+        session_id=template_id,
+        user_id=user_id,
+        name=name,
+        activity=activity,
+        intensity=intensity,
+        time_slot=time_slot,
+        duration_minutes=duration_minutes,
+        distance_km=distance_km,
+        notes=notes,
+        include_in_calendar=include_in_calendar,
+    )
