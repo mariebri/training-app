@@ -1,29 +1,30 @@
 import streamlit as st
-
-# Check if user is logged in
-if not st.session_state.get("user_id"):
-    st.error("🔒 Logg inn først")
-    st.stop()
-
+from utils.navigation import require_login_or_redirect, render_app_sidebar
 import plotly.express as px
 import plotly.graph_objects as go
 
-from services.calendar_service import get_all_sessions, get_profile, get_sidebar_first_name
+from services.calendar_service import (
+    get_all_sessions,
+    get_profile,
+    get_sidebar_first_name,
+)
 from services.analytics_service import badge_for_status, build_analytics_data
+from services.database import get_user_role, touch_user_activity
+
+# Check if user is logged in
+require_login_or_redirect()
 
 st.title("Prestasjonsoversikt")
 
+touch_user_activity(st.session_state.user_id)
+if not st.session_state.get("user_role"):
+    st.session_state.user_role = get_user_role(st.session_state.user_id)
 
 if st.session_state.user_id:
-    with st.sidebar:
-        first_name = get_sidebar_first_name(
-            st.session_state.user_id, st.session_state.username
-        )
-        st.write(f"👋 Hei, **{first_name}**!")
-        if st.button("🚪 Logg ut"):
-            st.session_state.user_id = None
-            st.session_state.username = None
-            st.rerun()
+    first_name = get_sidebar_first_name(
+        st.session_state.user_id, st.session_state.username
+    )
+    render_app_sidebar(first_name, st.session_state.get("user_role"))
 
 rows = get_all_sessions(st.session_state.user_id)
 profile = get_profile(st.session_state.user_id)
@@ -156,7 +157,7 @@ with tabs[2]:
     key_col2.metric("ATL", f"{atl:.1f}", f"{(atl / max(ctl, 1.0)):.2f} ATL/CTL")
     key_col3.metric("TSB", f"{tsb:.1f}", badge_for_status(tsb_light))
 
-    st.dataframe(key_values_df, hide_index=True, width="content")
+    st.dataframe(key_values_df, hide_index=True, width="stretch")
 
     with st.expander("Hva disse verdiene betyr"):
         st.markdown("**CTL:** Langsiktig formutvikling (omtrent 6 uker).")
@@ -177,7 +178,7 @@ with tabs[3]:
         xaxis_title="Dato",
         yaxis_title="Skår",
     )
-    st.plotly_chart(fitness_fig, width="content")
+    st.plotly_chart(fitness_fig, width="stretch")
 
     weekly_fig = go.Figure()
     weekly_fig.add_trace(
@@ -204,7 +205,7 @@ with tabs[3]:
         yaxis_title="Belastning",
         bargap=0.2,
     )
-    st.plotly_chart(weekly_fig, width="content")
+    st.plotly_chart(weekly_fig, width="stretch")
 
     if not intensity_mix_df.empty:
         intensity_fig = px.pie(
@@ -213,4 +214,4 @@ with tabs[3]:
             values="duration_minutes",
             title="Intensitetsfordeling (siste 28 dager, i minutter)",
         )
-        st.plotly_chart(intensity_fig, width="content")
+        st.plotly_chart(intensity_fig, width="stretch")

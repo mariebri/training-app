@@ -15,6 +15,7 @@ def initialize_calendar_state(session_state):
         "selected_date": date.today(),
         "selected_event": None,
         "edit_mode": False,
+        "completion_mode": False,
         "last_calendar_action": None,
         "prefill_session": None,
     }
@@ -28,6 +29,8 @@ def close_dialog(session_state):
     session_state["dialog_mode"] = None
     session_state["selected_event"] = None
     session_state["edit_mode"] = False
+    session_state["completion_mode"] = False
+    session_state["last_calendar_action"] = None
     session_state["selected_date"] = date.today()
     session_state["prefill_session"] = None
 
@@ -37,6 +40,7 @@ def open_add_dialog(session_state, selected_date=None):
     session_state["dialog_mode"] = "add"
     session_state["selected_event"] = None
     session_state["edit_mode"] = False
+    session_state["completion_mode"] = False
     session_state["selected_date"] = selected_date or date.today()
 
 
@@ -45,6 +49,7 @@ def open_choose_dialog(session_state, selected_date=None):
     session_state["dialog_mode"] = "choose"
     session_state["selected_event"] = None
     session_state["edit_mode"] = False
+    session_state["completion_mode"] = False
     session_state["selected_date"] = selected_date or date.today()
 
 
@@ -53,6 +58,7 @@ def open_view_dialog(session_state, event):
     session_state["dialog_mode"] = "view"
     session_state["selected_event"] = event
     session_state["edit_mode"] = session_state.pop("in_editing", False)
+    session_state["completion_mode"] = session_state.pop("in_completion", False)
 
 
 def normalize_clicked_date(clicked_date_str):

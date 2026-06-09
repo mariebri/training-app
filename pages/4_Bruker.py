@@ -1,9 +1,5 @@
 import streamlit as st
-
-# Check if user is logged in
-if not st.session_state.get("user_id"):
-    st.error("🔒 Logg inn først")
-    st.stop()
+from utils.navigation import require_login_or_redirect, render_app_sidebar
 
 from services.calendar_service import (
     get_profile,
@@ -14,20 +10,23 @@ from services.calendar_service import (
     delete_template,
     get_sidebar_first_name,
 )
+from services.database import get_user_role, touch_user_activity
 from utils.constants import ACTIVITIES, TIME_SLOTS
+
+# Check if user is logged in
+require_login_or_redirect()
 
 st.title("Bruker")
 
+touch_user_activity(st.session_state.user_id)
+if not st.session_state.get("user_role"):
+    st.session_state.user_role = get_user_role(st.session_state.user_id)
+
 if st.session_state.user_id:
-    with st.sidebar:
-        first_name = get_sidebar_first_name(
-            st.session_state.user_id, st.session_state.username
-        )
-        st.write(f"👋 Hei, **{first_name}**!")
-        if st.button("🚪 Logg ut"):
-            st.session_state.user_id = None
-            st.session_state.username = None
-            st.rerun()
+    first_name = get_sidebar_first_name(
+        st.session_state.user_id, st.session_state.username
+    )
+    render_app_sidebar(first_name, st.session_state.get("user_role"))
 
 profile = get_profile(st.session_state.user_id) or {}
 

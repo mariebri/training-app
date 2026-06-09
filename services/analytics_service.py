@@ -11,17 +11,17 @@ from services.performance_model import (
 def badge_for_status(status):
     badges = {
         "green": "🟢 Bra",
-        "yellow": "🟡 Folg med",
+        "yellow": "🟡 Følg med",
         "red": "🔴 Risiko",
     }
-    return badges.get(status, "🟡 Folg med")
+    return badges.get(status, "🟡 Følg med")
 
 
 def tsb_status(tsb_value):
     if -10 <= tsb_value <= 10:
         return "green", "Balansert treningsfriskhet"
     if (-20 <= tsb_value < -10) or (10 < tsb_value <= 20):
-        return "yellow", "Folg med pa balansen mellom belastning og restitusjon"
+        return "yellow", "Følg med på balansen mellom belastning og restitusjon"
     return "red", "For sliten eller for fersk til kvalitetsprogresjon"
 
 
@@ -55,7 +55,9 @@ def spike_status(spike_value):
     return "red"
 
 
-def build_recommendations(remaining_budget, next_7d_max_load, spike_ratio, tsb, consistency_pct):
+def build_recommendations(
+    remaining_budget, next_7d_max_load, spike_ratio, tsb, consistency_pct
+):
     recommendations = []
 
     if remaining_budget < 0:
@@ -139,7 +141,9 @@ def build_analytics_data(rows):
         return {"has_sessions": False}
 
     session_df = pd.DataFrame(sessions)
-    session_df["session_date"] = pd.to_datetime(session_df["session_date"], errors="coerce")
+    session_df["session_date"] = pd.to_datetime(
+        session_df["session_date"], errors="coerce"
+    )
     session_df["duration_minutes"] = pd.to_numeric(
         session_df["duration_minutes"], errors="coerce"
     ).fillna(0)
@@ -229,9 +233,14 @@ def build_analytics_data(rows):
     consistency_pct = (consistency_days / 14) * 100
 
     weekly_series = (
-        session_df.set_index("session_date")["load"].resample("W-MON").sum().rename("weekly_load")
+        session_df.set_index("session_date")["load"]
+        .resample("W-MON")
+        .sum()
+        .rename("weekly_load")
     )
-    weekly_chart_df = weekly_series.reset_index().rename(columns={"session_date": "week"})
+    weekly_chart_df = weekly_series.reset_index().rename(
+        columns={"session_date": "week"}
+    )
 
     weekly_delta_pct = 0.0
     if len(weekly_series) >= 2 and weekly_series.iloc[-2] > 0:
@@ -260,7 +269,9 @@ def build_analytics_data(rows):
     else:
         risk_level = "Lav"
 
-    ctl_reference_candidates = df.loc[df["date"] <= (today - pd.Timedelta(days=14)), "ctl"]
+    ctl_reference_candidates = df.loc[
+        df["date"] <= (today - pd.Timedelta(days=14)), "ctl"
+    ]
     ctl_reference_14d = (
         ctl_reference_candidates.iloc[-1]
         if not ctl_reference_candidates.empty

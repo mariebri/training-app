@@ -1,11 +1,6 @@
 import streamlit as st
 import pandas as pd
-
-# Check if user is logged in
-if not st.session_state.get("user_id"):
-    st.error("🔒 Logg inn først")
-    st.stop()
-
+from utils.navigation import require_login_or_redirect, render_app_sidebar
 
 from services.calendar_service import (
     get_all_sessions,
@@ -13,19 +8,22 @@ from services.calendar_service import (
     get_sidebar_first_name,
 )
 from services.planner_service import build_planner_output
+from services.database import get_user_role, touch_user_activity
+
+# Check if user is logged in
+require_login_or_redirect()
 
 st.title("Treningsplanlegger")
 
+touch_user_activity(st.session_state.user_id)
+if not st.session_state.get("user_role"):
+    st.session_state.user_role = get_user_role(st.session_state.user_id)
+
 if st.session_state.user_id:
-    with st.sidebar:
-        first_name = get_sidebar_first_name(
-            st.session_state.user_id, st.session_state.username
-        )
-        st.write(f"👋 Hei, **{first_name}**!")
-        if st.button("🚪 Logg ut"):
-            st.session_state.user_id = None
-            st.session_state.username = None
-            st.rerun()
+    first_name = get_sidebar_first_name(
+        st.session_state.user_id, st.session_state.username
+    )
+    render_app_sidebar(first_name, st.session_state.get("user_role"))
 
 rows = get_all_sessions(st.session_state.user_id)
 sessions = sessions_to_dicts(rows)
@@ -101,7 +99,7 @@ tab1, tab2 = st.tabs(["Tabell", "Kalenderoppsett"])
 
 with tab1:
     plan_df = pd.DataFrame(structured_plan)
-    st.dataframe(plan_df, width="content", hide_index=True)
+    st.dataframe(plan_df, width="stretch", hide_index=True)
 
 with tab2:
     week_cols = st.columns(7)
